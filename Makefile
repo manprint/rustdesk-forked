@@ -25,7 +25,7 @@ BUILD    := docker build $(if $(PLATFORM),--platform $(PLATFORM)) \
             --label rustdesk.upstream.commit=$(UPSTREAM) \
             --label rustdesk.fork.commit=$(FORK)
 
-.PHONY: help images server allinone save need-registry push test e2e audit sync clean
+.PHONY: help images server allinone smoke save need-registry push test e2e audit sync clean
 
 help: ## list the targets
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -38,6 +38,9 @@ server: ## rustdesk-server-ws:TAG, hbbs + hbbr on scratch (docker-compose.yml)
 
 allinone: ## rustdesk-allinone:TAG, hbbs + hbbr + nginx, ssl and plain modes (compose.allinone.yml)
 	$(BUILD) -t rustdesk-allinone:$(TAG) -f Dockerfile.allinone .
+
+smoke: allinone ## quick check of rustdesk-allinone:TAG (healthy, WebSocket upgrade), the one the CI runs
+	scripts/smoke-allinone.sh rustdesk-allinone:$(TAG)
 
 save: images ## export the images to DIST/*.tar.gz for `docker load` on another host
 	mkdir -p $(DIST)

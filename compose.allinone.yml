@@ -17,7 +17,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.allinone
-    image: rustdesk-allinone:${RD_TAG:-local}
+    # Built here (make allinone) or pulled from a registry: RD_IMAGE and RD_TAG in .env, then
+    # `docker compose -f compose.allinone.yml pull` instead of the build.
+    image: ${RD_IMAGE:-rustdesk-allinone}:${RD_TAG:-local}
     restart: unless-stopped
     environment:
       # Public name the clients use, the one answering on 443.

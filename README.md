@@ -63,6 +63,26 @@ Ogni immagine porta le label `org.opencontainers.image.version` (versione di `se
 (checksum s6-overlay dedicato), ma **la build arm64 non è stata provata** e il client dei test è
 solo x86_64.
 
+### Immagine pubblicata (CI)
+
+`.github/workflows/docker.yml` costruisce `Dockerfile.allinone`, esegue
+`scripts/smoke-allinone.sh` (container `healthy`, upgrade WebSocket su `/ws/id` e `/ws/relay`) e
+pubblica su GitHub Container Registry solo se il controllo passa:
+
+| Evento | Tag pubblicati |
+|---|---|
+| push su `main` (esclusi i soli `.md`) | `ghcr.io/manprint/rustdesk-allinone:main` |
+| tag `vX.Y.Z` | `:X.Y.Z`, `:X.Y`, `:latest` |
+
+```bash
+git tag -a v1.0.1 -m "v1.0.1" && git push origin v1.0.1      # rilascio
+docker pull ghcr.io/manprint/rustdesk-allinone:1.0.0
+```
+
+Per usarla al posto della build locale: in `.env` `RD_IMAGE=ghcr.io/manprint/rustdesk-allinone` e
+`RD_TAG=1.0.0`, poi `docker compose -f compose.allinone.yml pull` e `up -d`. Solo `linux/amd64`.
+L'immagine `rustdesk-server-ws` non viene pubblicata: si costruisce con `make server`.
+
 ## Deploy (hbbs + hbbr, proxy sull'host)
 
 ```bash

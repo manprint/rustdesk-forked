@@ -9,7 +9,11 @@ Apache/nginx. Uso e deploy: `README.md`; scelte, risultati e storia: `README.md`
 - `server/`: sorgenti vendorizzati = fork `lejianwen/rustdesk-server@forapi` + upstream
   `rustdesk/rustdesk-server` + hardening locale. Commit di provenienza in `server/UPSTREAM`.
   Logica principale: `src/rendezvous_server.rs` (hbbs), `src/relay_server.rs` (hbbr).
-- `Makefile`: `images` (`server`, `allinone`), `save`, `push`, `test`, `e2e`, `audit`, `sync`, `clean`.
+- `Makefile`: `images` (`server`, `allinone`), `smoke`, `save`, `push`, `test`, `e2e`, `audit`, `sync`, `clean`.
+- `.github/workflows/docker.yml`: build + `scripts/smoke-allinone.sh` + push di
+  `ghcr.io/manprint/rustdesk-allinone` (`:main` a ogni push su `main`, `:X.Y.Z`/`:X.Y`/`:latest`
+  per i tag `vX.Y.Z`). Action fissate per commit: per alzarle,
+  `git ls-remote https://github.com/<action> refs/tags/<vN>`.
 - `Dockerfile` + `docker-compose.yml`: immagine `rustdesk-server-ws`, deploy hbbs + hbbr (porte ws
   21118/21119 solo su loopback).
 - `Dockerfile.allinone` + `compose.allinone.yml` + `allinone/rootfs`: immagine `rustdesk-allinone`,
@@ -33,8 +37,9 @@ Apache/nginx. Uso e deploy: `README.md`; scelte, risultati e storia: `README.md`
   letterali: `rustdesk.example.com`, `listen 443 ssl;`, `listen 80;`, `set_real_ip_from 10.0.0.1;`,
   `/etc/ssl/rustdesk/{fullchain,privkey}.pem`, `127.0.0.1:21118`, `127.0.0.1:21119`. Se cambiano
   nei file, aggiornare i due script.
-- Nomi immagine e tag: `rustdesk-server-ws:${RD_TAG}` e `rustdesk-allinone:${RD_TAG}` nei compose
-  devono coincidere con `IMAGES` e `TAG` del `Makefile`.
+- Nomi immagine e tag: `rustdesk-server-ws:${RD_TAG}` e `${RD_IMAGE:-rustdesk-allinone}:${RD_TAG}`
+  nei compose devono coincidere con `IMAGES` e `TAG` del `Makefile`; il nome su ghcr
+  (`rustdesk-allinone`) è in `env.IMAGE` del workflow.
 - I commenti nel codice e nelle config sono in inglese; documentazione in italiano.
 
 ## Stato di `server/` (verificato il 2026-11-19 contro i commit di `server/UPSTREAM`)
@@ -91,7 +96,9 @@ Eseguire in ordine; ogni passo va committato a parte. Mai saltare il punto 6.
 5. **Build e test unitari**: `make test` (30 test, ~2 min più la compilazione), poi `make images`.
 6. **Suite e2e**: `make e2e` deve dare tutto PASS: 6 varianti × 8 passi = 48 `PASS` nel `SUMMARY`.
    ~8 min a variante, ~50 min in tutto, una variante alla volta (rete e progetto compose fissi).
-7. **Rilascio**: `make images TAG=<tag>` (poi `make save` o `make push REGISTRY=...`), `RD_TAG`
+7. **Rilascio**: tag `vX.Y.Z` su `main` e `git push origin vX.Y.Z` (la CI pubblica l'all-in-one
+   su ghcr; un tag già pubblicato non va spostato, se la CI fallisce si corregge e si rilascia la
+   patch successiva). In alternativa `make images TAG=<tag>` (poi `make save` o `make push REGISTRY=...`), `RD_TAG`
    in `.env`, `docker compose up -d` (hbbs riavviato = tutti i dispositivi si ricollegano in
    ~20 s; hbbr riavviato = sessioni in corso interrotte). Per i proxy usare reload, non restart.
 8. Pulizia: `make clean`, `docker builder prune`.
