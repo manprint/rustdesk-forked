@@ -1,0 +1,60 @@
+# E2E base: hbbs/hbbr are reachable only through the proxy added by one variant file
+# (variant-*.yml), which owns the rd.test name. Run through ./run.sh.
+name: rd-e2e
+
+x-server: &server
+  build:
+    context: ../..
+  image: rustdesk-server-ws:local
+  volumes:
+    - data:/data
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  certs:
+    build: ./client
+    image: rd-e2e-client:local
+    entrypoint: ["/gen-certs.sh"]
+    volumes: ["certs:/certs"]
+
+  hbbs:
+    <<: *server
+    command: ["hbbs", "-r", "rd.test", "-k", "_"]
+    environment:
+      ALWAYS_USE_RELAY: "Y"
+      # Raised by run.sh for the load test: there every device comes from one address.
+      MAX_REG_PER_IP: ${RD_MAX_REG_PER_IP:-30}
+      MAX_IDS_PER_IP: ${RD_MAX_IDS_PER_IP:-300}
+
+  hbbr:
+    <<: *server
+    command: ["hbbr", "-k", "_"]
+    depends_on: [hbbs]
+
+  client:
+    image: rd-e2e-client:local
+    volumes: ["certs:/certs:ro", "data:/keys:ro", "shared:/shared"]
+
+  tester:
+    build:
+      context: ../..
+      dockerfile: test/e2e/tester/Dockerfile
+    image: rd-e2e-tester:local
+    environment:
+      RD_HOLD_SECONDS: ${RD_HOLD_SECONDS:-100}
+      RD_LOAD_DEVICES: ${RD_LOAD_DEVICES:-300}
+      RD_STATUS_URL: ${RD_STATUS_URL:-}
+    volumes: ["certs:/certs:ro", "data:/keys:ro", "shared:/shared:ro"]
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+
+volumes:
+  certs:
+  data:
+  shared:

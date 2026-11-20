@@ -1,0 +1,10 @@
+.git
+.serena
+.tokensave
+server/target
+**/*.md
+server/test.sqlite3*
+dist
+data
+certs
+.env

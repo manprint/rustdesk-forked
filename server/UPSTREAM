@@ -1,0 +1,8 @@
+# Provenance of this vendored tree. Updated by scripts/sync-upstream.sh.
+UPSTREAM_REPO=https://github.com/rustdesk/rustdesk-server.git
+UPSTREAM_COMMIT=680b60395ecf99a76f74a1d934e453bb6e5e0aa2
+HBB_COMMON_REPO=https://github.com/rustdesk/hbb_common.git
+HBB_COMMON_COMMIT=69cea8dafee147848ae88702029f4bf7df7224c3
+FORK_REPO=https://github.com/lejianwen/rustdesk-server.git
+FORK_BRANCH=forapi
+FORK_COMMIT=fb8b5b9cf494d045f0feb370d83913b1a7506388

@@ -1,0 +1,22 @@
+#!/command/with-contenv sh
+# Renders the shipped nginx site (nginx/ in the repository) from the RD_* settings.
+set -eu
+: "${RD_DOMAIN:?RD_DOMAIN is required}"
+src=/usr/share/rustdesk/nginx
+out=/run/nginx/conf.d
+mkdir -p "$out"
+cp "$src/rustdesk-http.conf" "$out/00-rustdesk-http.conf"
+case "${RD_MODE:-ssl}" in
+  ssl)
+    sed -e "s/rustdesk.example.com/$RD_DOMAIN/" -e "s/443 ssl;/${RD_HTTPS_PORT:-8443} ssl;/" \
+        -e "s|/etc/ssl/rustdesk/fullchain.pem|${RD_TLS_CERT:-/certs/fullchain.pem}|" \
+        -e "s|/etc/ssl/rustdesk/privkey.pem|${RD_TLS_KEY:-/certs/privkey.pem}|" \
+        "$src/rustdesk-ssl.conf" > "$out/rustdesk.conf" ;;
+  plain)
+    sed -e "s/rustdesk.example.com/$RD_DOMAIN/" -e "s/:80;/:${RD_HTTP_PORT:-8080};/" -e "s/listen 80;/listen ${RD_HTTP_PORT:-8080};/" \
+        -e "s|set_real_ip_from 10.0.0.1;|set_real_ip_from ${RD_EDGE_PROXY:?RD_EDGE_PROXY is required in plain mode};|" \
+        "$src/rustdesk-plain.conf" > "$out/rustdesk.conf" ;;
+  *) echo "RD_MODE must be ssl or plain" >&2; exit 1 ;;
+esac
+[ -e /proc/net/if_inet6 ] || sed -i '/listen \[::\]/d' "$out/rustdesk.conf"
+nginx -t -q

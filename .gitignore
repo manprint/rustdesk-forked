@@ -1,0 +1,8 @@
+/.env
+.serena/
+.tokensave/
+server/target/
+__pycache__/
+/dist/
+/data/
+/certs/

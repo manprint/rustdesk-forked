@@ -1,0 +1,39 @@
+# All-in-one image (Dockerfile.allinone) in place of hbbs + hbbr + proxy.
+services:
+  hbbs:
+    scale: 0
+  hbbr:
+    scale: 0
+  proxy:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.allinone
+    image: rustdesk-allinone:local
+    environment:
+      RD_DOMAIN: rd.test
+      RD_MODE: plain
+      RD_EDGE_PROXY: 172.31.250.10
+      MAX_REG_PER_IP: ${RD_MAX_REG_PER_IP:-30}
+      MAX_IDS_PER_IP: ${RD_MAX_IDS_PER_IP:-300}
+    volumes:
+      - data:/data
+      - certs:/certs:ro
+    read_only: true
+    tmpfs:
+      - /run:exec,uid=10001,gid=10001,mode=0755
+      - /tmp:uid=10001,gid=10001,mode=0700
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+  edge:
+    image: nginx:1.29-alpine
+    depends_on: [proxy]
+    restart: on-failure
+    environment:
+      RD_BACKEND: proxy:8080
+    volumes:
+      - ./edge/nginx-edge.conf:/etc/nginx/templates/default.conf.template:ro
+      - certs:/certs:ro
+    networks:
+      default:
+        ipv4_address: 172.31.250.10
+        aliases: [rd.test]

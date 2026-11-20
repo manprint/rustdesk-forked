@@ -1,0 +1,48 @@
+# RustDesk server (hbbs + hbbr) reachable only over WebSocket, to sit behind a reverse
+# proxy on 443 (see apache/ and nginx/). No RustDesk TCP/UDP port is published.
+name: rustdesk
+
+x-server: &server
+  build: .
+  image: rustdesk-server-ws:${RD_TAG:-local}
+  restart: unless-stopped
+  volumes:
+    - data:/data
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 512
+  ulimits:
+    nofile: 65536
+  stop_grace_period: 5s
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "5"}
+
+services:
+  hbbs:
+    <<: *server
+    # -r: relay name handed to clients, they turn it into wss://<domain>/ws/relay.
+    # -k _: only clients configured with this server's public key are served.
+    command: ["hbbs", "-r", "${RD_DOMAIN:?set RD_DOMAIN in .env}", "-k", "_"]
+    environment:
+      # Nothing but the proxy is reachable, so direct (P2P) attempts would only add delay.
+      ALWAYS_USE_RELAY: "Y"
+      MAX_WS_PEERS: ${RD_MAX_WS_PEERS:-10000}
+      MAX_REG_PER_IP: ${RD_MAX_REG_PER_IP:-30}
+      MAX_IDS_PER_IP: ${RD_MAX_IDS_PER_IP:-300}
+    ports:
+      # The ws listeners trust X-Real-IP: only the reverse proxy may reach them.
+      - "${RD_BIND:-127.0.0.1}:21118:21118"
+
+  hbbr:
+    <<: *server
+    command: ["hbbr", "-k", "_"]
+    depends_on: [hbbs]
+    ports:
+      - "${RD_BIND:-127.0.0.1}:21119:21119"
+
+volumes:
+  # Holds id_ed25519(.pub) and db_v2.sqlite3: back it up, losing the key pair
+  # means reconfiguring every client.
+  data:

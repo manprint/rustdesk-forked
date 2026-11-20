@@ -1,0 +1,4 @@
+target
+src/version.rs
+id_ed25519*
+test.sqlite3*

@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1
+# hbbs + hbbr + nginx in one container, supervised by s6-overlay, everything as an
+# unprivileged user (nginx listens on 8443 with TLS or on 8080 behind an edge proxy).
+ARG RUST_IMAGE=rust:1.100-alpine3.24@sha256:8d0e82abfdf9a38071e07cabc5afba4ddbe077631a80e4e742a760c38beadc33
+ARG NGINX_IMAGE=nginx:1.29-alpine
+
+FROM ${RUST_IMAGE} AS build
+RUN apk add --no-cache build-base musl-dev perl pkgconfig openssl-dev openssl-libs-static
+WORKDIR /src
+COPY server/ .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --locked --bin hbbs --bin hbbr \
+ && install -D -t /out target/release/hbbs target/release/hbbr
+
+FROM ${NGINX_IMAGE}
+ARG TARGETARCH
+ARG S6_VERSION=v3.2.3.2
+ARG S6_SHA_NOARCH=5379750ed30a84bbd2e2dd74847ba6b5bd29cd0b2e3ea2ec58049b57eb2eda12
+ARG S6_SHA_AMD64=e6befcc96a437a3831386ecfc51808c5d3e939dc5fe3c02ae9284599e8aa2408
+ARG S6_SHA_ARM64=b17f17a82e7a515c682a91edaf2ffdabb73f891981b6c1fd712115693a2f8b4c
+RUN set -eu; \
+    case "$TARGETARCH" in \
+      amd64) arch=x86_64 sum=$S6_SHA_AMD64 ;; \
+      arm64) arch=aarch64 sum=$S6_SHA_ARM64 ;; \
+      *) echo "unsupported architecture $TARGETARCH" >&2; exit 1 ;; \
+    esac; \
+    cd /tmp; url=https://github.com/just-containers/s6-overlay/releases/download/$S6_VERSION; \
+    wget -q "$url/s6-overlay-noarch.tar.xz" "$url/s6-overlay-$arch.tar.xz"; \
+    printf '%s  %s\n' "$S6_SHA_NOARCH" s6-overlay-noarch.tar.xz "$sum" "s6-overlay-$arch.tar.xz" | sha256sum -c -; \
+    tar -C / -Jxpf s6-overlay-noarch.tar.xz; tar -C / -Jxpf "s6-overlay-$arch.tar.xz"; rm -f /tmp/*.tar.xz; \
+    addgroup -g 10001 rustdesk; adduser -D -H -u 10001 -G rustdesk rustdesk; \
+    rm -rf /etc/nginx/conf.d /docker-entrypoint.d /docker-entrypoint.sh; \
+    ln -s /run/nginx/conf.d /etc/nginx/conf.d; \
+    install -d -o 10001 -g 10001 -m 0700 /data; chown 10001:10001 /run
+COPY --from=build /out/ /usr/bin/
+COPY nginx/nginx.conf nginx/rustdesk-locations.conf /etc/nginx/
+COPY nginx/rustdesk-http.conf nginx/rustdesk-ssl.conf nginx/rustdesk-plain.conf /usr/share/rustdesk/nginx/
+COPY allinone/rootfs/ /
+ENV HOME=/data ALWAYS_USE_RELAY=Y \
+    S6_READ_ONLY_ROOT=1 S6_BEHAVIOUR_IF_STAGE2_FAILS=2 S6_KILL_GRACETIME=3000 S6_VERBOSITY=1
+USER 10001:10001
+WORKDIR /data
+VOLUME /data
+EXPOSE 8080 8443
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --start-interval=2s \
+  CMD ["/usr/local/bin/rd-healthcheck"]
+ENTRYPOINT ["/init"]

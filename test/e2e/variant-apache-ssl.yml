@@ -1,0 +1,11 @@
+services:
+  proxy:
+    image: httpd:2.4
+    command: ["httpd-foreground", "-DRD_SSL"]
+    volumes:
+      - ./apache/httpd-test.conf:/usr/local/apache2/conf/httpd.conf:ro
+      - ../../apache:/prod:ro
+      - certs:/certs:ro
+    networks:
+      default:
+        aliases: [rd.test]

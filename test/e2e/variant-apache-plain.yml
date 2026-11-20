@@ -1,0 +1,19 @@
+services:
+  proxy:
+    image: httpd:2.4
+    volumes:
+      - ./apache/httpd-test.conf:/usr/local/apache2/conf/httpd.conf:ro
+      - ../../apache:/prod:ro
+  edge:
+    image: nginx:1.29-alpine
+    depends_on: [proxy]
+    restart: on-failure
+    environment:
+      RD_BACKEND: proxy:80
+    volumes:
+      - ./edge/nginx-edge.conf:/etc/nginx/templates/default.conf.template:ro
+      - certs:/certs:ro
+    networks:
+      default:
+        ipv4_address: 172.31.250.10
+        aliases: [rd.test]

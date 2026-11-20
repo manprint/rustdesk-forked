@@ -1,0 +1,83 @@
+# Single-container deploy: hbbs + hbbr + nginx under s6-overlay (image rustdesk-allinone).
+# Alternative to docker-compose.yml. Values come from .env (see .env.example).
+#
+# Two modes, chosen with the lines tagged [plain] and [ssl] below:
+#   [plain] (default)  nginx serves plain HTTP on 8080. An edge proxy owns 443, terminates TLS and
+#                      forwards /ws/id and /ws/relay here. What the edge proxy must do is listed
+#                      in nginx/rustdesk-plain.conf.
+#   [ssl]              nginx terminates TLS itself on 8443, published as 443 of this host.
+# To switch to ssl: comment every [plain] line and uncomment every [ssl] line.
+#
+# Before the first start create the data directory, owned by the user of the container:
+#   sudo install -d -o 10001 -g 10001 -m 0700 ./data
+name: rustdesk-allinone
+
+services:
+  rustdesk:
+    build:
+      context: .
+      dockerfile: Dockerfile.allinone
+    image: rustdesk-allinone:${RD_TAG:-local}
+    restart: unless-stopped
+    environment:
+      # Public name the clients use, the one answering on 443.
+      RD_DOMAIN: ${RD_DOMAIN:?set RD_DOMAIN in .env}
+
+      # [plain] HTTP behind an edge proxy.
+      RD_MODE: plain
+      # [plain] Address (or CIDR) the edge proxy connects from, as this container sees it: only
+      # its X-Forwarded-For is believed.
+      #   edge proxy on this host     the gateway of the network at the bottom of this file (default)
+      #   edge proxy on another host  the address of that host, e.g. RD_EDGE_PROXY=192.0.2.10
+      RD_EDGE_PROXY: ${RD_EDGE_PROXY:-172.31.251.1}
+
+      # [ssl] TLS terminated by this container.
+      # RD_MODE: ssl
+
+      # Devices registered at the same time.
+      MAX_WS_PEERS: ${RD_MAX_WS_PEERS:-10000}
+      # New registrations accepted from one IP in a burst / distinct new ids per IP per day.
+      MAX_REG_PER_IP: ${RD_MAX_REG_PER_IP:-30}
+      MAX_IDS_PER_IP: ${RD_MAX_IDS_PER_IP:-300}
+    ports:
+      # [plain] HTTP, for the edge proxy only: never publish it on an address reachable from the
+      # internet. Edge proxy on another host: replace 127.0.0.1 with the address of this host on
+      # the network shared with it, and let only the edge proxy through the firewall.
+      - "127.0.0.1:8080:8080"
+      # [ssl] HTTPS for the clients.
+      # - "443:8443"
+    volumes:
+      # Identity of the server (id_ed25519, id_ed25519.pub) and device database (db_v2.sqlite3):
+      # back this directory up. It must exist before the start, owned by 10001:10001 with mode
+      # 0700: the container runs as uid 10001 without capabilities and cannot fix it by itself.
+      - type: bind
+        source: ${RD_DATA_DIR:-./data}
+        target: /data
+        bind:
+          create_host_path: false
+      # [ssl] Directory with fullchain.pem and privkey.pem, both readable by uid 10001:
+      #   sudo chown root:10001 certs/privkey.pem && sudo chmod 0640 certs/privkey.pem
+      # After a renewal: docker compose -f compose.allinone.yml exec rustdesk nginx -s reload
+      # - ${RD_CERT_DIR:-./certs}:/certs:ro
+    read_only: true
+    tmpfs:
+      - /run:exec,uid=10001,gid=10001,mode=0755
+      - /tmp:uid=10001,gid=10001,mode=0700
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 1024
+    ulimits:
+      nofile: 65536
+    stop_grace_period: 10s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+networks:
+  default:
+    ipam:
+      config:
+        # Fixed, so that the address a proxy on this host is seen from (the gateway) is known.
+        # If the subnet is already taken, change it here together with the default of RD_EDGE_PROXY.
+        - subnet: 172.31.251.0/24
+          gateway: 172.31.251.1

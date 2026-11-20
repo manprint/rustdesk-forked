@@ -1,0 +1,16 @@
+services:
+  proxy:
+    image: nginx:1.29-alpine
+    command: ["/start.sh"]
+    # nginx resolves its upstreams at startup and exits if they are not there yet.
+    depends_on: [hbbs, hbbr]
+    restart: on-failure
+    environment:
+      RD_SITE: rustdesk-ssl.conf
+    volumes:
+      - ./nginx/start.sh:/start.sh:ro
+      - ../../nginx:/prod:ro
+      - certs:/certs:ro
+    networks:
+      default:
+        aliases: [rd.test]

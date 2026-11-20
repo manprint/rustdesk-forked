@@ -1,0 +1,4 @@
+#!/command/with-contenv sh
+# Loopback only: nginx in this container is the single way in.
+cd /data
+exec hbbs -b 127.0.0.1 -r "${RD_DOMAIN:?RD_DOMAIN is required}" -k _

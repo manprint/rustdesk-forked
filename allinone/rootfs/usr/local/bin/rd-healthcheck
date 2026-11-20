@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs through `docker exec`, which already has the environment of the container.
+port=${RD_HTTPS_PORT:-8443}
+[ "${RD_MODE:-ssl}" = plain ] && port=${RD_HTTP_PORT:-8080}
+nc -z 127.0.0.1 21118 && nc -z 127.0.0.1 21119 && nc -z 127.0.0.1 "$port"
